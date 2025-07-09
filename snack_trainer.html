@@ -162,3 +162,397 @@
         }
         
         .stop-btn:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+        
+        .reset-btn {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .reset-btn:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+        
+        .pause-btn {
+            background: #fd7e14;
+            color: white;
+        }
+        
+        .pause-btn:hover {
+            background: #e8650e;
+            transform: translateY(-2px);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            transition: width 0.1s ease;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💪 Weight Lifting Timer</h1>
+        
+        <div class="settings">
+            <div class="setting-group">
+                <label for="sets">Sets:</label>
+                <input type="number" id="sets" value="5" min="1" max="20">
+            </div>
+            <div class="setting-group">
+                <label for="reps">Reps:</label>
+                <input type="number" id="reps" value="20" min="1" max="100">
+            </div>
+            <div class="setting-group">
+                <label for="upTime">Up Time (s):</label>
+                <input type="number" id="upTime" value="4" min="1" max="30">
+            </div>
+            <div class="setting-group">
+                <label for="holdTime">Hold Time (s):</label>
+                <input type="number" id="holdTime" value="1" min="1" max="30">
+            </div>
+            <div class="setting-group">
+                <label for="downTime">Down Time (s):</label>
+                <input type="number" id="downTime" value="4" min="1" max="30">
+            </div>
+            <div class="setting-group">
+                <label for="restTime">Rest Time (s):</label>
+                <input type="number" id="restTime" value="120" min="10" max="600">
+            </div>
+        </div>
+        
+        <div class="timer-display" id="timerDisplay">0</div>
+        
+        <div class="phase" id="phaseDisplay">Ready to Start</div>
+        
+        <div class="message" id="messageDisplay"></div>
+        
+        <div class="sets-counter" id="setsCounter">Sets remaining: 0</div>
+        
+        <div class="reps-counter" id="repsCounter">Reps remaining: 0</div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="totalTime">0:00</div>
+                <div class="stat-label">Total Time</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="workTime">0:00</div>
+                <div class="stat-label">Work Time</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="restTime">0:00</div>
+                <div class="stat-label">Rest Time</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        
+        <div class="controls">
+            <button class="start-btn" id="startBtn" onclick="startWorkout()">Start Workout</button>
+            <button class="pause-btn" id="pauseBtn" onclick="pauseWorkout()" style="display: none;">Pause</button>
+            <button class="stop-btn" id="stopBtn" onclick="stopWorkout()" style="display: none;">Stop</button>
+            <button class="reset-btn" id="resetBtn" onclick="resetWorkout()">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        let timer;
+        let currentPhase = 'ready'; // 'countdown', 'up', 'hold', 'down', 'rest'
+        let currentTime = 0;
+        let currentRep = 0;
+        let currentSet = 0;
+        let totalReps = 0;
+        let totalSets = 0;
+        let isRunning = false;
+        let isPaused = false;
+        let startTime = 0;
+        let pausedTime = 0;
+        let totalWorkTime = 0;
+        let totalRestTimeAccumulated = 0;
+        
+        const phases = {
+            countdown: { name: 'GET READY', class: 'countdown' },
+            up: { name: 'UP', class: 'up' },
+            hold: { name: 'HOLD', class: 'hold' },
+            down: { name: 'DOWN', class: 'down' },
+            rest: { name: 'REST', class: 'rest' }
+        };
+        
+        const motivationalMessages = {
+            countdown: ["🔥 Get ready to crush it!", "💪 Time to show what you're made of!", "⚡ Let's do this!"],
+            up: ["💪 Push it up!", "🚀 Lift with power!", "⬆️ Feel the strength!"],
+            hold: ["🔥 Hold strong!", "💎 Stay solid!", "⏱️ You got this!"],
+            down: ["⬇️ Control the movement!", "🎯 Slow and steady!", "💪 Feel the burn!"],
+            rest: ["😤 Rest and recover!", "💧 Hydrate and breathe!", "⏰ Get ready for the next set!", "🧘 Focus your mind!"],
+            setComplete: ["🎉 Set complete! Great job!", "💪 One step closer to your goal!", "🔥 You're crushing it!"],
+            weightReminder: "🏋️ GET READY TO LIFT THE WEIGHT!"
+        };
+        
+        // Audio context for sound effects
+        let audioContext;
+        
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        
+        function playDing(count = 1) {
+            initAudio();
+            
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                }, i * 200); // 200ms between dings for double ding
+            }
+        }
+        
+        function getRandomMessage(phase) {
+            const messages = motivationalMessages[phase];
+            if (messages && Array.isArray(messages)) {
+                return messages[Math.floor(Math.random() * messages.length)];
+            }
+            return "";
+        }
+        
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function updateDisplay() {
+            document.getElementById('timerDisplay').textContent = currentTime;
+            document.getElementById('setsCounter').textContent = `Sets remaining: ${totalSets - currentSet}`;
+            document.getElementById('repsCounter').textContent = `Reps remaining: ${totalReps - currentRep}`;
+            
+            // Update timing stats
+            if (isRunning && !isPaused) {
+                const elapsed = Math.floor((Date.now() - startTime - pausedTime) / 1000);
+                document.getElementById('totalTime').textContent = formatTime(elapsed);
+                document.getElementById('workTime').textContent = formatTime(totalWorkTime);
+                document.getElementById('restTime').textContent = formatTime(totalRestTimeAccumulated);
+            }
+            
+            const phaseDisplay = document.getElementById('phaseDisplay');
+            const messageDisplay = document.getElementById('messageDisplay');
+            
+            if (currentPhase === 'ready') {
+                phaseDisplay.textContent = 'Ready to Start';
+                phaseDisplay.className = 'phase';
+                messageDisplay.textContent = "Set your weights and prepare for an amazing workout! 💪";
+            } else if (currentPhase === 'complete') {
+                phaseDisplay.textContent = 'Workout Complete! 🎉';
+                phaseDisplay.className = 'phase';
+                messageDisplay.textContent = "Amazing work! You've completed your entire workout! 🏆";
+            } else if (isPaused) {
+                phaseDisplay.textContent = 'PAUSED ⏸️';
+                phaseDisplay.className = 'phase';
+                messageDisplay.textContent = "Take your time, resume when ready!";
+            } else {
+                phaseDisplay.textContent = phases[currentPhase].name;
+                phaseDisplay.className = `phase ${phases[currentPhase].class}`;
+                
+                // Special messages
+                if (currentTime === 5 && (currentPhase === 'countdown' || currentPhase === 'rest')) {
+                    messageDisplay.textContent = motivationalMessages.weightReminder;
+                } else {
+                    messageDisplay.textContent = getRandomMessage(currentPhase);
+                }
+            }
+            
+            // Update progress bar (based on sets completed)
+            const totalProgress = currentSet / totalSets * 100;
+            document.getElementById('progressFill').style.width = `${totalProgress}%`;
+        }
+        
+        function getPhaseTime(phase) {
+            switch(phase) {
+                case 'countdown': return 10;
+                case 'up': return parseInt(document.getElementById('upTime').value);
+                case 'hold': return parseInt(document.getElementById('holdTime').value);
+                case 'down': return parseInt(document.getElementById('downTime').value);
+                case 'rest': return parseInt(document.getElementById('restTime').value);
+                default: return 0;
+            }
+        }
+        
+        function nextPhase() {
+            if (currentPhase === 'countdown') {
+                currentPhase = 'up';
+                currentTime = getPhaseTime('up') - 1;
+                playDing(1); // Single ding when starting up phase
+            } else if (currentPhase === 'up') {
+                currentPhase = 'hold';
+                currentTime = getPhaseTime('hold') - 1;
+            } else if (currentPhase === 'hold') {
+                currentPhase = 'down';
+                currentTime = getPhaseTime('down') - 1;
+                playDing(1); // Single ding when starting down phase
+            } else if (currentPhase === 'down') {
+                currentRep++;
+                if (currentRep >= totalReps) {
+                    // Set complete
+                    document.getElementById('messageDisplay').textContent = getRandomMessage('setComplete');
+                    playDing(2); // Double ding when set is complete
+                    currentSet++;
+                    currentRep = 0;
+                    
+                    if (currentSet >= totalSets) {
+                        // Workout complete
+                        currentPhase = 'complete';
+                        stopWorkout();
+                        return;
+                    }
+                    
+                    // Start rest period
+                    currentPhase = 'rest';
+                    currentTime = getPhaseTime('rest') - 1;
+                } else {
+                    currentPhase = 'up';
+                    currentTime = getPhaseTime('up') - 1;
+                    playDing(1); // Single ding when starting next rep
+                }
+            } else if (currentPhase === 'rest') {
+                // Rest complete, start next set
+                currentPhase = 'up';
+                currentTime = getPhaseTime('up') - 1;
+                playDing(1); // Single ding when starting new set
+            }
+            updateDisplay();
+        }
+        
+        function tick() {
+            if (isPaused) return;
+            
+            if (currentTime > 0) {
+                currentTime--;
+                
+                // Track time spent in each phase
+                if (currentPhase === 'rest') {
+                    totalRestTimeAccumulated++;
+                } else if (currentPhase === 'up' || currentPhase === 'hold' || currentPhase === 'down') {
+                    totalWorkTime++;
+                }
+                
+                updateDisplay();
+            } else {
+                nextPhase();
+            }
+        }
+        
+        function startWorkout() {
+            if (!isRunning) {
+                totalSets = parseInt(document.getElementById('sets').value);
+                totalReps = parseInt(document.getElementById('reps').value);
+                currentSet = 0;
+                currentRep = 0;
+                currentPhase = 'countdown';
+                currentTime = getPhaseTime('countdown') - 1;
+                isRunning = true;
+                isPaused = false;
+                startTime = Date.now();
+                pausedTime = 0;
+                totalWorkTime = 0;
+                totalRestTimeAccumulated = 0;
+                
+                timer = setInterval(tick, 1000);
+                
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('pauseBtn').style.display = 'inline-block';
+                document.getElementById('stopBtn').style.display = 'inline-block';
+                
+                // Disable settings inputs
+                document.querySelectorAll('.setting-group input').forEach(input => {
+                    input.disabled = true;
+                });
+                
+                updateDisplay();
+            }
+        }
+        
+        function pauseWorkout() {
+            if (isRunning && !isPaused) {
+                isPaused = true;
+                pausedTime += Date.now() - (startTime + pausedTime);
+                document.getElementById('pauseBtn').textContent = 'Resume';
+                updateDisplay();
+            } else if (isRunning && isPaused) {
+                isPaused = false;
+                startTime = Date.now() - pausedTime;
+                pausedTime = 0;
+                document.getElementById('pauseBtn').textContent = 'Pause';
+                updateDisplay();
+            }
+        }
+        
+        function stopWorkout() {
+            if (isRunning) {
+                clearInterval(timer);
+                isRunning = false;
+                isPaused = false;
+                
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('pauseBtn').style.display = 'none';
+                document.getElementById('pauseBtn').textContent = 'Pause';
+                document.getElementById('stopBtn').style.display = 'none';
+                
+                // Enable settings inputs
+                document.querySelectorAll('.setting-group input').forEach(input => {
+                    input.disabled = false;
+                });
+            }
+        }
+        
+        function resetWorkout() {
+            stopWorkout();
+            currentPhase = 'ready';
+            currentTime = 0;
+            currentRep = 0;
+            currentSet = 0;
+            totalReps = 0;
+            totalSets = 0;
+            totalWorkTime = 0;
+            totalRestTimeAccumulated = 0;
+            pausedTime = 0;
+            
+            // Reset display
+            document.getElementById('totalTime').textContent = '0:00';
+            document.getElementById('workTime').textContent = '0:00';
+            document.getElementById('restTime').textContent = '0:00';
+            
+            updateDisplay();
+        }
+        
+        // Initialize display
+        updateDisplay();
+    </script>
+</body>
+</html>
